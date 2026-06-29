@@ -58,6 +58,17 @@ RUN aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co
     aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_reg4_pretrain.pth -d /home/camenduru/.cache/torch/hub/checkpoints -o dinov2_vitl14_reg4_pretrain.pth && \
     aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx -d /home/camenduru/.u2net -o u2net.onnx
 
+# the lean-rewrite weights list dropped this radiance-field decoder ckpt that pipeline.json
+# references; TRELLIS loads ALL models at startup, so it must be present.
+RUN aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co/JeffreyXiang/TRELLIS-image-large/resolve/main/ckpts/slat_dec_rf_swin8_B_64l8r16_fp16.safetensors -d /content/model/ckpts -o slat_dec_rf_swin8_B_64l8r16_fp16.safetensors && \
+    aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co/JeffreyXiang/TRELLIS-image-large/raw/main/ckpts/slat_dec_rf_swin8_B_64l8r16_fp16.json -d /content/model/ckpts -o slat_dec_rf_swin8_B_64l8r16_fp16.json
+
+# We only use IMAGE-to-3D, but upstream pipelines/__init__ eagerly imports the TEXT pipeline
+# (drags in open3d + a numpy ABI clash with kaolin). Drop that import; keep transformers (cheap).
+# kaolin's prebuilt wheel was compiled against numpy 1.x → force numpy<2 (overrides the base pin).
+RUN pip install --no-cache-dir transformers "numpy==1.26.4" && \
+    sed -i '/trellis_text_to_3d/d; /TrellisTextTo3DPipeline/d' /content/TRELLIS/trellis/pipelines/__init__.py
+
 COPY ./worker_runpod.py /content/TRELLIS/worker_runpod.py
 WORKDIR /content/TRELLIS
 CMD python worker_runpod.py
